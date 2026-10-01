@@ -43,7 +43,7 @@ export default function TTSWorkspace({ ...props }: TTSWorkspaceProps) {
     const [selectedLocale, setSelectedLocale] = useState<string>('')
     const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('')
     const [showQrDialog, setShowQrDialog] = useState(false)
-    const { getToken } = useAuth()
+    const { getToken, token } = useAuth()
     const { saveHistoryRecord: save } = useTTSContext()
 
 
@@ -67,7 +67,10 @@ export default function TTSWorkspace({ ...props }: TTSWorkspaceProps) {
         resolver: zodResolver(TTSRequestSchame),
         defaultValues: {
             options: {
-                voice: 'Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)',
+                // 这里必须是音色的短名（Service 返回的 Name），
+                // 原来是 "Microsoft Server Speech Text to Speech Voice (zh-CN, XiaoxiaoNeural)"
+                // 这种旧版长名，跟列表里的 value 对不上，会出现"未选中音色"的状态。
+                voice: 'zh-CN-XiaoxiaoNeural',
             },
             text: '君不见黄河之水天上来，奔流到海不复回。'
         }
@@ -148,24 +151,31 @@ export default function TTSWorkspace({ ...props }: TTSWorkspaceProps) {
         }
     })
 
+    // 订阅表单值：form.getValues() 每次调用都返回新对象，
+    // 直接放进 useMemo 依赖数组等于依赖永远变化（等价于每次渲染都重算）；
+    // 这里改为订阅 watch，值真正变化时才重算。
+    const watchedOptions = form.watch('options')
+
     const legadoApiLink = useMemo(() => {
-        const values = form.getValues()
-        if (!values || typeof window === 'undefined') {
+        if (!watchedOptions || typeof window === 'undefined') {
             return ''
         }
         const protocol = window.location.protocol.replace(":", "")
         const host = window.location.host
-        let queryString = Object.entries(values.options)
-            .filter(([, value]) => value != null && value != undefined)
-            .map(([key, value]) => `${key}=${value}`).join('&')
+        let queryString = Object.entries(watchedOptions)
+            .filter(([, value]) => value != null)
+            .map(([key, value]) => `${key}=${encodeURIComponent(String(value))}`).join('&')
         queryString += `&protocol=${protocol}`
-        const token = getToken()
-        if (token) {
-            queryString += `&token=${token}`
+        // 这里直接读 localStorage，而不是调 getToken()：
+        // getToken 每次渲染都是新函数，放进依赖数组会让 useMemo 永远失效；
+        // 而 useAuth 会在挂载后把 token 同步进 state，所以依赖 [token] 就能覆盖登录态变化。
+        const authToken = (typeof window !== 'undefined' && window.localStorage.getItem('auth_token')) || token
+        if (authToken) {
+            queryString += `&token=${encodeURIComponent(authToken)}`
         }
         const apiUrl = `${protocol}://${host}/api/legado-import?${queryString}`
         return apiUrl
-    }, [form.getValues()])
+    }, [watchedOptions, token])
 
     const legadoImportLink = useMemo(() => {
         return `legado://import/httpTTS?src=${encodeURIComponent(legadoApiLink)}`

@@ -1,6 +1,15 @@
 import { EdgeTTSService } from "@/service/edge-tts-service"
 import { TTSOptions } from "@/service/tts-service"
-Error.stackTraceLimit = Infinity;
+
+// 只在显式开启调试时才输出完整调用栈。
+// 原来的 `Error.stackTraceLimit = Infinity` 会无条件把完整栈写进生产日志。
+const DEBUG = process.env.MS_RA_FORWARDER_DEBUG === 'true' || process.env.NODE_ENV !== 'production'
+
+// 该路由读取 authorization 等请求头，必须按动态请求处理。
+// 否则 next build 的静态预渲染会先渲染一次并抛出 DYNAMIC_SERVER_USAGE，
+// 被 catch 后打成 "textToSpeach error"（每次构建都会出现的误导性噪音）。
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: Request) {
     try {
         const authorization = request.headers.get('authorization')
@@ -54,7 +63,9 @@ export async function GET(request: Request) {
         return new Response(audioBlob, { status: 200, headers: { 'Content-Type': 'audio/mpeg' } })
     } catch (error) {
         console.log('textToSpeach error', error)
-        console.log("Full stack", (error as Error).stack)
+        if (DEBUG) {
+            console.error("Full stack", (error as Error).stack)
+        }
         return new Response(JSON.stringify({ error: (error as Error).message }), { status: 500, headers: { 'Content-Type': 'application/json' } })
     }
 }

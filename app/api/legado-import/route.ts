@@ -1,3 +1,8 @@
+// 该路由依赖 request.headers / request.url 以及环境变量，始终按动态请求处理。
+// 否则 next build 的静态预渲染会先尝试渲染一次，抛出 DYNAMIC_SERVER_USAGE
+// 并被打上 "textToSpeach error" 日志（误导性噪音，且每次构建都会发生）。
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: Request) {
     try {
         const requiredToken = process.env.MS_RA_FORWARDER_TOKEN || process.env.TOKEN
@@ -33,16 +38,20 @@ export async function GET(request: Request) {
         const pitch = parseNumberParam('pitch', 0, -100, 100);
         const volume = parseNumberParam('volume', 100, -100, 100);
         const personality = searchParams.get('personality') ?? undefined;
-        const options = {
-            voice,
-            volume,
-            pitch,
-            personality,
+        // 注意：这里只拼装“固定值”参数，不要放入 rate。
+        // rate 必须留给阅读（Legado）按 {{speakSpeed}} 模板求值；若当普通参数写入，
+        // 生成的 url 会出现两个 rate，而 /api/text-to-speech 取第一个值，
+        // Number('{{(speakSpeed - 10) * 2}}') === NaN，请求直接 500。
+        const options: Record<string, string | number> = { voice, volume, pitch };
+        if (personality) {
+            options.personality = personality;
         }
-        let queryString = Object.entries(options).map(([key, value]) => {
-            return `${key}=${value}`
-        }).join('&')
-        queryString = `${queryString}&rate={{(speakSpeed - 10) * 2}}`
+        const params: string[] = Object.entries(options).map(([key, value]) => {
+            return `${key}=${encodeURIComponent(String(value))}`
+        })
+        // 语速：Legado 的 speakSpeed 取值 5~50，(speakSpeed - 10) * 2 映射为 -10% ~ 80%
+        params.push('rate={{(speakSpeed - 10) * 2}}')
+        const queryString = params.join('&')
         const protocol = searchParams.get('protocol') || 'http';
         const host = request.headers.get('host')
         const baseUrl = `${protocol}://${host}/api/text-to-speech`

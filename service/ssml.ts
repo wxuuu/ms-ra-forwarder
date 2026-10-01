@@ -20,6 +20,11 @@ export class SSML {
         this.pitch = pitch
     }
     toString(): string {
+        // 数值兜底：undefined / NaN 会生成 volume="NaN%" 这类非法 SSML，
+        // 微软服务端会直接拒绝整个请求。
+        const volume = Number.isFinite(this.volume) ? this.volume : 0
+        const rate = Number.isFinite(this.rate) ? this.rate : 0
+        const pitch = Number.isFinite(this.pitch) ? this.pitch : 0
         const obj = {
             "speak":
             {
@@ -28,9 +33,9 @@ export class SSML {
                     "prosody":
                     {
                         "text": this.text,
-                        "@volume": `${this.volume}%`,
-                        "@rate": `${this.rate}%`,
-                        "@pitch": `${this.pitch}%`
+                        "@volume": `${volume}%`,
+                        "@rate": `${rate}%`,
+                        "@pitch": `${pitch}%`
                     },
                     "@name": this.voiceName
                 },

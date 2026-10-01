@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { isAuthRequired } from '@/app/actions/login'
 
@@ -56,17 +56,22 @@ export function useAuth() {
      * 获取当前token
      */
     const getToken = () => {
+        // 本 hook 标记了 'use client'，但仍可能在 SSR / 预渲染阶段执行，
+        // 那时访问 localStorage 会抛 ReferenceError 并导致整页渲染失败。
+        if (typeof window === 'undefined') {
+            return token
+        }
         return token || localStorage.getItem('auth_token')
     }
 
     /**
      * 重定向到登录页面（如果需要认证且未登录）
      */
-    const redirectToLoginIfNeeded = () => {
+    const redirectToLoginIfNeeded = useCallback(() => {
         if (authRequired && !isAuthenticated) {
             router.push('/login')
         }
-    }
+    }, [authRequired, isAuthenticated, router])
 
     return {
         isAuthenticated,

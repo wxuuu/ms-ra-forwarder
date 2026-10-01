@@ -19,7 +19,10 @@ export const TTSOptionsSchema = z.object({
     personality: z.string().optional(),
 })
 
-export type TTSOptions = z.infer<typeof TTSOptionsSchema>
+export type TTSOptions = z.output<typeof TTSOptionsSchema>
+
+/** 调用方传入的形态：voice 必填，其余数值字段可省略，由 schema 补默认值 */
+export type TTSOptionsInput = z.input<typeof TTSOptionsSchema>
 
 export const SpeechBoundarySchema = z.object({
     text: z.string(),
